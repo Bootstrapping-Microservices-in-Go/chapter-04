@@ -10,77 +10,59 @@ import (
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// CustomEvent for lambda
-type CustomEvent struct {
-	ID   string
-	Name string
-}
-
-var (
-	awsRegion   string = "us-east-1"
-	awsEndpoint string = "http://minio:9000"
-	bucketName  string
-
-	s3svc *s3.Client
-)
-
-func init() {
-	bucketName = os.Getenv("BUCKET")
-	minioUser := "steven"
-	minioPassword := "changeme"
-
-	customResolver := aws.EndpointResolverFunc(func(service, region string) (aws.Endpoint, error) {
-		return aws.Endpoint{
-			PartitionID:   "aws",
-			URL:           awsEndpoint,
-			SigningRegion: awsRegion,
-		}, nil
-	})
-
-	awsCfg := aws.Config{
-		Region:           awsRegion,
-		EndpointResolver: customResolver,
-		Credentials: credentials.NewStaticCredentialsProvider(
-			minioUser,
-			minioPassword,
-			""),
+func failOnMissingEnvironmentVariable(variableName, failureMessage string) string {
+	value, found := os.LookupEnv(variableName)
+	if !found {
+		log.Fatal(failureMessage)
 	}
-	s3svc = s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		o.UsePathStyle = true
-	})
+
+	return value
 }
 
 func main() {
-	port, found := os.LookupEnv(`PORT`)
-	if !found {
-		log.Fatal(`Please specify the port number for the HTTP server with the environment variable PORT.`)
-	}
+	port := failOnMissingEnvironmentVariable(`PORT`, `Please specify the port number for the HTTP server with the environment variable PORT.`)
+	minioStorageHost := failOnMissingEnvironmentVariable(`MINIO_STORAGE_HOST`, `Please specify the name for the storage host in the variable MINIO_STORAGE_HOST.`)
+	minioStoragePort := failOnMissingEnvironmentVariable(`MINIO_STORAGE_PORT`, `Please specify the port number for the storage host with the environment variable MINIO_STORAGE_PORT.`)
+	bucketName := failOnMissingEnvironmentVariable("BUCKET", `Please specify the S3 bucket name in the environment variable BUCKET.`)
+	minioUser := failOnMissingEnvironmentVariable(`MINIO_ROOT_USER`, `Please specify the S3 user name in the environment variable MINIO_ROOT_USER.`)
+	minioPassword := failOnMissingEnvironmentVariable(`MINIO_ROOT_PASSWORD`, `Please specify the S3 password in the environment variable MINIO_ROOT_PASSWORD.`)
+
+	minioEndpoint := fmt.Sprintf(`%s:%s`, minioStorageHost, minioStoragePort)
+	awsRegion := "us-east-1"
+
+	awsCfg, _ := config.LoadDefaultConfig(
+		context.Background(),
+		config.WithRegion(awsRegion),
+	)
+
+	awsCfg.Credentials = aws.NewCredentialsCache(
+		credentials.NewStaticCredentialsProvider(
+			minioUser,
+			minioPassword,
+			""))
+
+	s3svc := s3.New(s3.Options{
+		Credentials:  awsCfg.Credentials,
+		Region:       awsRegion,
+		BaseEndpoint: &minioEndpoint,
+		UsePathStyle: true,
+	})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /video", func(w http.ResponseWriter, r *http.Request) {
 		path := r.FormValue(`path`)
-		log.Println(`Attempting to retrieve `, path)
 		input := &s3.GetObjectInput{
 			Bucket: aws.String(bucketName),
 			Key:    aws.String(path),
 		}
 		result, err := s3svc.GetObject(context.Background(), input)
-		slog.Info(
-			"s3svc.GetObject",
-			`bucket`, *input.Bucket,
-			`key`, *input.Key,
-			`error`, err,
-		)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
-			log.Printf("%s not found.", path)
-			_, lbErr := s3svc.ListBuckets(context.TODO(), nil)
-			slog.Info(`err != nil`, `error`, lbErr)
-			log.Print(err.Error())
 			return
 		}
 		defer result.Body.Close()
@@ -88,6 +70,6 @@ func main() {
 		io.Copy(w, result.Body)
 	})
 
-	slog.Info(`video-storage online`, `port`, port, `bucketName`, bucketName, `host`, awsEndpoint)
+	slog.Info(`video-storage online`, `port`, port, `bucketName`, bucketName, `host`, minioEndpoint)
 	http.ListenAndServe(fmt.Sprint(":", port), mux)
 }

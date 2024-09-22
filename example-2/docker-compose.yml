@@ -22,7 +22,7 @@ services:
     environment:
       - MINIO_ROOT_USER=steven
       - MINIO_ROOT_PASSWORD=changeme
-      - MINIO_DEFAULT_BUCKETS=test-bucket
+      - MINIO_DEFAULT_BUCKETS=videos
     restart: "no"
     ports:
       - "9000:9000"
@@ -35,9 +35,12 @@ services:
       context: ./video-storage
       dockerfile: Dockerfile
     environment:
-      - BUCKET=test-bucket
+      - BUCKET=videos
       - MINIO_ROOT_USER=steven
       - MINIO_ROOT_PASSWORD=changeme
-      - MINIO_ENDPOINT=minio
+      - MINIO_STORAGE_HOST=http://minio
+      - MINIO_STORAGE_PORT=9000
       - PORT=80
+    ports:
+      - "4001:80"
     restart: "no"
