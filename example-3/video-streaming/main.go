@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	contentLength = "Content-Length"
-	contentType   = "Content-Type"
+	contentType = "Content-Type"
 )
 
 type Video struct {
@@ -26,12 +25,21 @@ type Video struct {
 	VideoPath string             `bson:"videoPath"`
 }
 
+func failOnMissingEnvironmentVariable(variableName, failureMessage string) string {
+	value, found := os.LookupEnv(variableName)
+	if !found {
+		log.Fatal(failureMessage)
+	}
+
+	return value
+}
+
 func main() {
-	port := os.Getenv(`PORT`)
-	dbhost := os.Getenv(`DBHOST`)
-	dbname := os.Getenv(`DBNAME`)
-	videoStorageHost := os.Getenv(`VIDEO_STORAGE_HOST`)
-	videoStoragePort := os.Getenv(`VIDEO_STORAGE_PORT`)
+	port := failOnMissingEnvironmentVariable(`PORT`, `Please specify the port number for the HTTP server with the environment variable PORT.`)
+	videoStorageHost := failOnMissingEnvironmentVariable(`VIDEO_STORAGE_HOST`, `Please specify the video storage host name with the environment variable VIDEO_STORAGE_HOST.`)
+	videoStoragePort := failOnMissingEnvironmentVariable(`VIDEO_STORAGE_PORT`, `Please specify the video storage port number with the environment variable VIDEO_STORAGE_PORT.`)
+	dbhost := failOnMissingEnvironmentVariable(`DBHOST`, `Please specify the database host for the id->path mapping with the environment variable DBHOST.`)
+	dbname := failOnMissingEnvironmentVariable(`DBNAME`, `Please specify the database name for the id->path mapping with the environment variable DBHOST.`)
 
 	// Connect to Mongo
 	// https://pkg.go.dev/go.mongodb.org/mongo-driver/mongo
@@ -45,7 +53,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /video", func(w http.ResponseWriter, r *http.Request) {
-		id := r.FormValue(`id`)
+		id := r.FormValue(`path`)
 		if id == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			log.Println(`id missing`)
@@ -72,7 +80,7 @@ func main() {
 			}
 		}
 
-		u, _ := url.Parse(fmt.Sprintf("http://%s:%s/video?id=%s", videoStorageHost, videoStoragePort, res.VideoPath))
+		u, _ := url.Parse(fmt.Sprintf("%s:%s/video?id=%s", videoStorageHost, videoStoragePort, res.VideoPath))
 		resp, err := http.Get(u.String())
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
