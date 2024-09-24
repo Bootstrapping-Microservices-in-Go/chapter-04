@@ -23,26 +23,11 @@ func failOnMissingEnvironmentVariable(variableName, failureMessage string) strin
 	return value
 }
 
-func failWithMessageOnError(err error, msg string) {
-	if err != nil {
-		log.Fatal(err.Error() + "[" + msg + "]")
-	}
-}
-
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.Info(`middleware`, `method`, r.Method, `host`, r.Host, `url`, r.URL)
 		next.ServeHTTP(w, r)
 	})
-}
-
-type httpWrapper struct {
-	client s3.HTTPClient
-}
-
-func (hw *httpWrapper) Do(r *http.Request) (*http.Response, error) {
-	slog.Info(`s3wrapper`, `method`, r.Method, `host`, r.Host, `url`, r.URL)
-	return hw.client.Do(r)
 }
 
 func main() {
@@ -63,12 +48,10 @@ func main() {
 			""))
 
 	s3svc := s3.New(s3.Options{
-		Credentials:   credProvider,
-		Region:        awsRegion,
-		BaseEndpoint:  &minioEndpoint,
-		UsePathStyle:  true,
-		HTTPClient:    &httpWrapper{http.DefaultClient},
-		ClientLogMode: aws.LogRequest | aws.LogRetries | aws.LogResponse,
+		Credentials:  credProvider,
+		Region:       awsRegion,
+		BaseEndpoint: &minioEndpoint,
+		UsePathStyle: true,
 	})
 
 	mux := http.NewServeMux()
