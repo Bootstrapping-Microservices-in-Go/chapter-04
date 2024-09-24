@@ -1,6 +1,6 @@
 module github.com/bootstrapping-microservices-in-go/chapter-04/example-2/video-storage
 
-go 1.22.0
+go 1.23.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.30.1
