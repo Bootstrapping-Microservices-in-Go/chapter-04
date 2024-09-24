@@ -10,7 +10,6 @@ import (
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -35,19 +34,14 @@ func main() {
 	minioEndpoint := fmt.Sprintf(`%s:%s`, minioStorageHost, minioStoragePort)
 	awsRegion := "us-east-1"
 
-	awsCfg, _ := config.LoadDefaultConfig(
-		context.Background(),
-		config.WithRegion(awsRegion),
-	)
-
-	awsCfg.Credentials = aws.NewCredentialsCache(
+	credProvider := aws.NewCredentialsCache(
 		credentials.NewStaticCredentialsProvider(
 			minioUser,
 			minioPassword,
 			""))
 
 	s3svc := s3.New(s3.Options{
-		Credentials:  awsCfg.Credentials,
+		Credentials:  credProvider,
 		Region:       awsRegion,
 		BaseEndpoint: &minioEndpoint,
 		UsePathStyle: true,

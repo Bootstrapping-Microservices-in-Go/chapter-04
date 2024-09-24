@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -53,7 +54,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /video", func(w http.ResponseWriter, r *http.Request) {
-		id := r.FormValue(`path`)
+		id := r.FormValue(`id`)
 		if id == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			log.Println(`id missing`)
@@ -67,10 +68,10 @@ func main() {
 			return
 		}
 
-		var res Video
+		var video Video
 		err = collection.
 			FindOne(context.Background(), bson.M{"_id": objectId}).
-			Decode(&res)
+			Decode(&video)
 		if err != nil {
 			// ErrNoDocuments means that the filter did not match any documents in
 			// the collection.
@@ -78,18 +79,30 @@ func main() {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-		}
 
-		u, _ := url.Parse(fmt.Sprintf("%s:%s/video?id=%s", videoStorageHost, videoStoragePort, res.VideoPath))
-		resp, err := http.Get(u.String())
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			slog.Info(`unknown error`, `MongoErr`, err)
 			return
 		}
 
+		slog.Info(`S3 response`, `objectID`, objectId.String(), `ID`, video.ID, `path`, video.VideoPath)
+
+		u, err := url.Parse(fmt.Sprintf("%s:%s/video?id=%s", videoStorageHost, videoStoragePort, video.VideoPath))
+		if err != nil {
+			slog.Info(`invalid-url`, `error`, err)
+			return
+		}
+
+		response, err := http.Get(u.String())
+		if err != nil || response.StatusCode != http.StatusOK {
+			slog.Info(`video-storage`, `retrieval error`, err, `url`, u.String(), `addr`, response.Request.RemoteAddr)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer response.Body.Close()
+
 		w.Header().Add(contentType, "video/mp4")
 		// use io.Copy for streaming.
-		io.Copy(w, resp.Body)
+		io.Copy(w, response.Body)
 	})
 
 	http.ListenAndServe(fmt.Sprint(":", port), mux)
