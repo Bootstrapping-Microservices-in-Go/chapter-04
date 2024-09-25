@@ -34,8 +34,7 @@ func failOnMissingEnvironmentVariable(variableName, failureMessage string) strin
 	return value
 }
 
-func getPathFromObjectID(r *http.Request, collection *mongo.Collection) *string {
-	id := r.FormValue(`id`)
+func getPathFromObjectID(w http.ResponseWriter, id string, collection *mongo.Collection) *string {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		slog.Error(`id missing`)
@@ -89,7 +88,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /video", func(w http.ResponseWriter, r *http.Request) {
-		videoPath := getPathFromObjectID(r, collection)
+		videoPath := getPathFromObjectID(w, r.FormValue(`id`), collection)
 		if videoPath == nil {
 			slog.Info(`video-storage`, `id`, `not found`)
 			w.WriteHeader(http.StatusNotFound)
