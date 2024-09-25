@@ -9,6 +9,10 @@ import (
 	"os"
 )
 
+const (
+	contentType = "Content-Type"
+)
+
 func failOnMissingEnvironmentVariable(variableName, failureMessage string) string {
 	value, found := os.LookupEnv(variableName)
 	if !found {
@@ -38,7 +42,7 @@ func main() {
 		}
 		defer resp.Body.Close()
 
-		// use io.Copy for streaming.
+		w.Header().Add(contentType, "video/mp4")
 		io.Copy(w, resp.Body)
 	})
 
